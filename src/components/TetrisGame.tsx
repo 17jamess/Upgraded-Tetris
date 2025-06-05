@@ -53,47 +53,60 @@ const TetrisGame: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 flex items-center justify-center">
-      <div className="flex gap-6 max-w-6xl w-full justify-center">
-        {/* Game Board */}
-        <Card className="bg-black/40 backdrop-blur-sm border-purple-500/30">
-          <CardContent className="p-6">
-            <GameBoard
-              board={board}
-              currentPiece={currentPiece}
-              currentPosition={currentPosition}
-              particles={particles}
-              gameOver={gameOver}
-              isPaused={isPaused}
-              score={score}
-              onStartGame={startGame}
-            />
-          </CardContent>
-        </Card>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-2 sm:p-4 flex items-center justify-center overflow-hidden">
+      <div className="w-full max-w-6xl mx-auto">
+        {/* Mobile Layout - Stack vertically */}
+        <div className="flex flex-col lg:flex-row gap-3 sm:gap-6 justify-center items-center">
+          {/* Game Board - Full width on mobile */}
+          <div className="w-full max-w-sm lg:max-w-none">
+            <Card className="bg-black/40 backdrop-blur-sm border-purple-500/30">
+              <CardContent className="p-3 sm:p-6">
+                <GameBoard
+                  board={board}
+                  currentPiece={currentPiece}
+                  currentPosition={currentPosition}
+                  particles={particles}
+                  gameOver={gameOver}
+                  isPaused={isPaused}
+                  score={score}
+                  onStartGame={startGame}
+                />
+              </CardContent>
+            </Card>
+          </div>
 
-        {/* Game Info */}
-        <div className="flex flex-col gap-4 min-w-[250px]">
-          <GameInfo
-            score={score}
-            lines={lines}
-            level={level}
-            gameStarted={gameStarted}
-            gameOver={gameOver}
-            isPaused={isPaused}
-            nextPiece={nextPiece}
-            onStartGame={startGame}
-            onTogglePause={togglePause}
-          />
+          {/* Game Info and Controls - Side by side on mobile */}
+          <div className="w-full lg:min-w-[250px] lg:max-w-[250px]">
+            <div className="flex flex-row lg:flex-col gap-3 sm:gap-4">
+              {/* Game Info - Smaller on mobile */}
+              <div className="flex-1 lg:flex-none">
+                <GameInfo
+                  score={score}
+                  lines={lines}
+                  level={level}
+                  gameStarted={gameStarted}
+                  gameOver={gameOver}
+                  isPaused={isPaused}
+                  nextPiece={nextPiece}
+                  onStartGame={startGame}
+                  onTogglePause={togglePause}
+                />
+              </div>
 
-          <MobileControls
-            gameStarted={gameStarted}
-            gameOver={gameOver}
-            isPaused={isPaused}
-            onMove={movePiece}
-            onRotate={rotatePiece}
-            onStartKeyRepeat={startKeyRepeat}
-            onStopKeyRepeat={stopKeyRepeat}
-          />
+              {/* Mobile Controls - Show on all screen sizes but optimized */}
+              <div className="flex-1 lg:flex-none">
+                <MobileControls
+                  gameStarted={gameStarted}
+                  gameOver={gameOver}
+                  isPaused={isPaused}
+                  onMove={movePiece}
+                  onRotate={rotatePiece}
+                  onStartKeyRepeat={startKeyRepeat}
+                  onStopKeyRepeat={stopKeyRepeat}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
