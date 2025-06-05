@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +7,10 @@ import { toast } from 'sonner';
 const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 20;
 const EMPTY_CELL = 0;
+
+// Key repeat timing constants
+const KEY_REPEAT_DELAY = 150; // Initial delay before repeat starts
+const KEY_REPEAT_INTERVAL = 50; // Interval between repeats
 
 // Tetris pieces with their rotations
 const TETRIS_PIECES = {
@@ -89,7 +92,12 @@ const TetrisGame: React.FC = () => {
   
   const gameLoopRef = useRef<number>();
   const lastDropTime = useRef(Date.now());
-  const dropInterval = Math.max(100, 1000 - (level - 1) * 100);
+  const dropInterval = Math.max(50, 500 - (level - 1) * 50); // Faster base speed and progression
+  
+  // Key repeat management
+  const keysPressed = useRef<Set<string>>(new Set());
+  const keyRepeatTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const keyRepeatIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const getRandomPiece = useCallback(() => {
     const pieces = Object.keys(TETRIS_PIECES);
@@ -205,10 +213,13 @@ const TetrisGame: React.FC = () => {
     
     if (isValidPosition(currentPiece.shape, newPosition)) {
       setCurrentPosition(newPosition);
+      return true;
     } else if (dy > 0) {
       // Hit bottom, place piece
       placePiece();
+      return false;
     }
+    return false;
   }, [currentPiece, currentPosition, gameOver, isPaused, isValidPosition, placePiece]);
 
   const rotatePiece = useCallback(() => {
@@ -226,6 +237,37 @@ const TetrisGame: React.FC = () => {
   const dropPiece = useCallback(() => {
     movePiece(0, 1);
   }, [movePiece]);
+
+  // Key repeat handlers
+  const startKeyRepeat = useCallback((key: string, action: () => void) => {
+    if (keyRepeatTimers.current.has(key)) return;
+
+    // Execute immediately
+    action();
+
+    // Start repeat after delay
+    const timer = setTimeout(() => {
+      const interval = setInterval(action, KEY_REPEAT_INTERVAL);
+      keyRepeatIntervals.current.set(key, interval);
+    }, KEY_REPEAT_DELAY);
+
+    keyRepeatTimers.current.set(key, timer);
+  }, []);
+
+  const stopKeyRepeat = useCallback((key: string) => {
+    const timer = keyRepeatTimers.current.get(key);
+    const interval = keyRepeatIntervals.current.get(key);
+
+    if (timer) {
+      clearTimeout(timer);
+      keyRepeatTimers.current.delete(key);
+    }
+
+    if (interval) {
+      clearInterval(interval);
+      keyRepeatIntervals.current.delete(key);
+    }
+  }, []);
 
   const startGame = useCallback(() => {
     const newBoard = Array(BOARD_HEIGHT).fill(null).map(() => Array(BOARD_WIDTH).fill(EMPTY_CELL));
@@ -252,7 +294,7 @@ const TetrisGame: React.FC = () => {
     }
   }, [gameStarted, gameOver]);
 
-  // Game loop
+  // Game loop with smoother timing
   useEffect(() => {
     if (!gameStarted || gameOver || isPaused) return;
 
@@ -263,13 +305,13 @@ const TetrisGame: React.FC = () => {
         lastDropTime.current = now;
       }
 
-      // Update particles
+      // Update particles with smoother animation
       setParticles(prev => prev.map(particle => ({
         ...particle,
         x: particle.x + particle.vx,
         y: particle.y + particle.vy,
-        vy: particle.vy + 0.1,
-        life: particle.life - 0.02
+        vy: particle.vy + 0.15, // Slightly faster gravity
+        life: particle.life - 0.015 // Longer lasting particles
       })).filter(particle => particle.life > 0));
 
       gameLoopRef.current = requestAnimationFrame(gameLoop);
@@ -283,41 +325,61 @@ const TetrisGame: React.FC = () => {
     };
   }, [gameStarted, gameOver, isPaused, dropInterval, dropPiece]);
 
-  // Keyboard controls
+  // Enhanced keyboard controls with key repeat
   useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (!gameStarted || gameOver || isPaused) return;
+
+      // Prevent default for game keys
+      if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', ' ', 'p', 'P'].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      // Don't start repeat if key is already being processed
+      if (keysPressed.current.has(e.key)) return;
+      keysPressed.current.add(e.key);
 
       switch (e.key) {
         case 'ArrowLeft':
-          e.preventDefault();
-          movePiece(-1, 0);
+          startKeyRepeat('ArrowLeft', () => movePiece(-1, 0));
           break;
         case 'ArrowRight':
-          e.preventDefault();
-          movePiece(1, 0);
+          startKeyRepeat('ArrowRight', () => movePiece(1, 0));
           break;
         case 'ArrowDown':
-          e.preventDefault();
-          movePiece(0, 1);
+          startKeyRepeat('ArrowDown', () => movePiece(0, 1));
           break;
         case 'ArrowUp':
         case ' ':
-          e.preventDefault();
-          rotatePiece();
+          rotatePiece(); // Rotation shouldn't repeat
           break;
         case 'p':
         case 'P':
-          e.preventDefault();
-          togglePause();
+          togglePause(); // Pause shouldn't repeat
           break;
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [gameStarted, gameOver, isPaused, movePiece, rotatePiece, togglePause]);
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysPressed.current.delete(e.key);
+      stopKeyRepeat(e.key);
+    };
 
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      // Clean up all timers
+      keyRepeatTimers.current.forEach(timer => clearTimeout(timer));
+      keyRepeatIntervals.current.forEach(interval => clearInterval(interval));
+      keyRepeatTimers.current.clear();
+      keyRepeatIntervals.current.clear();
+    };
+  }, [gameStarted, gameOver, isPaused, movePiece, rotatePiece, togglePause, startKeyRepeat, stopKeyRepeat]);
+
+  // ... keep existing code (renderBoard, renderNextPiece functions)
   const renderBoard = () => {
     const displayBoard = board.map(row => [...row]);
     
@@ -341,7 +403,7 @@ const TetrisGame: React.FC = () => {
         {row.map((cell, x) => (
           <div
             key={`${y}-${x}`}
-            className="w-7 h-7 border border-gray-700/30 transition-all duration-150"
+            className="w-7 h-7 border border-gray-700/30 transition-all duration-75" // Faster transition
             style={{
               backgroundColor: PIECE_COLORS[cell],
               boxShadow: cell !== EMPTY_CELL ? 'inset 0 0 0 1px rgba(255,255,255,0.3)' : 'none'
@@ -387,12 +449,13 @@ const TetrisGame: React.FC = () => {
                 {particles.map(particle => (
                   <div
                     key={particle.id}
-                    className="absolute w-1 h-1 rounded-full"
+                    className="absolute w-1.5 h-1.5 rounded-full" // Slightly larger particles
                     style={{
                       left: particle.x,
                       top: particle.y,
                       backgroundColor: particle.color,
-                      opacity: particle.life
+                      opacity: particle.life,
+                      boxShadow: `0 0 4px ${particle.color}` // Glowing effect
                     }}
                   />
                 ))}
@@ -445,7 +508,7 @@ const TetrisGame: React.FC = () => {
                 <div className="mt-4 space-y-1 text-xs">
                   <div className="flex justify-between">
                     <span>Move:</span>
-                    <span>← → ↓</span>
+                    <span>← → ↓ (hold)</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Rotate:</span>
@@ -501,7 +564,10 @@ const TetrisGame: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => movePiece(-1, 0)}
+                  onMouseDown={() => startKeyRepeat('ArrowLeft', () => movePiece(-1, 0))}
+                  onMouseUp={() => stopKeyRepeat('ArrowLeft')}
+                  onTouchStart={() => startKeyRepeat('ArrowLeft', () => movePiece(-1, 0))}
+                  onTouchEnd={() => stopKeyRepeat('ArrowLeft')}
                   disabled={!gameStarted || gameOver || isPaused}
                   className="border-purple-500/50"
                 >
@@ -519,7 +585,10 @@ const TetrisGame: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => movePiece(1, 0)}
+                  onMouseDown={() => startKeyRepeat('ArrowRight', () => movePiece(1, 0))}
+                  onMouseUp={() => stopKeyRepeat('ArrowRight')}
+                  onTouchStart={() => startKeyRepeat('ArrowRight', () => movePiece(1, 0))}
+                  onTouchEnd={() => stopKeyRepeat('ArrowRight')}
                   disabled={!gameStarted || gameOver || isPaused}
                   className="border-purple-500/50"
                 >
@@ -529,7 +598,10 @@ const TetrisGame: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => movePiece(0, 1)}
+                  onMouseDown={() => startKeyRepeat('ArrowDown', () => movePiece(0, 1))}
+                  onMouseUp={() => stopKeyRepeat('ArrowDown')}
+                  onTouchStart={() => startKeyRepeat('ArrowDown', () => movePiece(0, 1))}
+                  onTouchEnd={() => stopKeyRepeat('ArrowDown')}
                   disabled={!gameStarted || gameOver || isPaused}
                   className="border-purple-500/50"
                 >
