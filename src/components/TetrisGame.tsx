@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Play, Pause, RotateCw, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Play, Pause, RotateCw, ArrowDown, ArrowLeft, ArrowRight, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const BOARD_WIDTH = 10;
@@ -11,6 +11,7 @@ const EMPTY_CELL = 0;
 // Key repeat timing constants
 const KEY_REPEAT_DELAY = 150; // Initial delay before repeat starts
 const KEY_REPEAT_INTERVAL = 50; // Interval between repeats
+const FAST_DROP_INTERVAL = 30; // Faster drop when holding down
 
 // Tetris pieces with their rotations
 const TETRIS_PIECES = {
@@ -89,10 +90,12 @@ const TetrisGame: React.FC = () => {
   const [gameOver, setGameOver] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [particles, setParticles] = useState<Particle[]>([]);
+  const [isFastDrop, setIsFastDrop] = useState(false);
   
   const gameLoopRef = useRef<number>();
   const lastDropTime = useRef(Date.now());
-  const dropInterval = Math.max(50, 500 - (level - 1) * 50); // Faster base speed and progression
+  const baseDropInterval = Math.max(50, 500 - (level - 1) * 50);
+  const dropInterval = isFastDrop ? FAST_DROP_INTERVAL : baseDropInterval;
   
   // Key repeat management
   const keysPressed = useRef<Set<string>>(new Set());
@@ -245,6 +248,11 @@ const TetrisGame: React.FC = () => {
     // Execute immediately
     action();
 
+    // Set fast drop for down key
+    if (key === 'ArrowDown') {
+      setIsFastDrop(true);
+    }
+
     // Start repeat after delay
     const timer = setTimeout(() => {
       const interval = setInterval(action, KEY_REPEAT_INTERVAL);
@@ -267,6 +275,11 @@ const TetrisGame: React.FC = () => {
       clearInterval(interval);
       keyRepeatIntervals.current.delete(key);
     }
+
+    // Stop fast drop when releasing down key
+    if (key === 'ArrowDown') {
+      setIsFastDrop(false);
+    }
   }, []);
 
   const startGame = useCallback(() => {
@@ -285,6 +298,7 @@ const TetrisGame: React.FC = () => {
     setGameStarted(true);
     setIsPaused(false);
     setParticles([]);
+    setIsFastDrop(false);
     lastDropTime.current = Date.now();
   }, [getRandomPiece]);
 
@@ -435,7 +449,7 @@ const TetrisGame: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4 flex items-center justify-center">
-      <div className="flex gap-6 max-w-6xl w-full">
+      <div className="flex gap-6 max-w-6xl w-full justify-center">
         {/* Game Board */}
         <Card className="bg-black/40 backdrop-blur-sm border-purple-500/30">
           <CardContent className="p-6">
@@ -499,10 +513,16 @@ const TetrisGame: React.FC = () => {
                     Start Game
                   </Button>
                 ) : (
-                  <Button onClick={togglePause} className="w-full bg-purple-600 hover:bg-purple-700">
-                    {isPaused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
-                    {isPaused ? 'Resume' : 'Pause'}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button onClick={togglePause} className="w-full bg-purple-600 hover:bg-purple-700">
+                      {isPaused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
+                      {isPaused ? 'Resume' : 'Pause'}
+                    </Button>
+                    <Button onClick={startGame} className="w-full bg-red-600 hover:bg-red-700">
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Restart
+                    </Button>
+                  </div>
                 )}
                 
                 <div className="mt-4 space-y-1 text-xs">
@@ -517,6 +537,10 @@ const TetrisGame: React.FC = () => {
                   <div className="flex justify-between">
                     <span>Pause:</span>
                     <span>P</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Fast Drop:</span>
+                    <span>Hold ↓</span>
                   </div>
                 </div>
               </div>
